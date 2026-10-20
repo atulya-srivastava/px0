@@ -1005,11 +1005,20 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 #viewport.linking, #viewport.linking *, #diffview.linking, #diffview.linking * { cursor: pointer; }
 
 @keyframes diffFlash {
-  0% { background-color: rgba(255, 215, 0, 0.35); }
-  100% { background-color: transparent; }
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }
 .diff-row-flash {
-  animation: diffFlash 1.2s ease-out;
+  position: relative;
+}
+.diff-row-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 215, 0, 0.16);
+  pointer-events: none;
+  z-index: 5;
+  animation: diffFlash 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* ---------- hover card ---------- */
@@ -1218,11 +1227,24 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 }
 /* Split: deletions and additions paired side by side, each half its own mini-row. */
 .diff-row-pair { display: flex; }
-.diff-side { flex: 1 1 0; min-width: 0; }
-.diff-side-left { border-right: none; }
+.diff-side { flex: 1 1 50%; min-width: 0; }
+.diff-side-left { border-right: 1px solid var(--line); }
 
-/* Middle gutter channel in split view providing dedicated corridor for connector arrows */
+/* Middle gutter channel in split view: hidden when 0 moves, displayed when moves exist */
 .diff-split-gutter {
+  display: none;
+}
+
+.has-diff-moves .diff-side {
+  flex: 1 1 0;
+}
+
+.has-diff-moves .diff-side-left {
+  border-right: none;
+}
+
+.has-diff-moves .diff-split-gutter {
+  display: block;
   flex: none;
   width: var(--diff-gutter-w, 28px);
   background: var(--bg2);
@@ -1305,6 +1327,7 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 }
 
 .diff-move-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;

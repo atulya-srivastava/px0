@@ -127,11 +127,11 @@ async function drawDiff(d, force = false) {
     diffview.scrollTop = d.diffScroll;
     d.diffScroll = 0;
   } else if (d.cur) {
-    scrollDiffToLine(d.cur);
+    scrollDiffToLine(d.cur, false, false);
   }
 }
 
-export function scrollDiffToLine(line, smooth = false, flash = true) {
+export function scrollDiffToLine(line, smooth = false, flash = false) {
   if (!diffview || !line) return;
   const row = diffview.querySelector(`[data-l="${line}"]`) ||
               diffview.querySelector(`[data-at="${line}"]`) ||
@@ -155,6 +155,7 @@ function appendHunks(frag, hunks, mode, reviewable) {
 
 function renderDiff(d) {
   diffContent.replaceChildren();
+  diffContent.classList.remove('has-diff-moves');
   if (diffContent.style.getPropertyValue('--diff-gutter-w')) {
     diffContent.style.removeProperty('--diff-gutter-w');
   }
@@ -585,10 +586,14 @@ function detectMoves(hunks) {
 
   // Dynamically size the middle gutter corridor based on maximum concurrent tracks
   const maxTracks = computeMaxConcurrentTracks(detectedMoves);
-  const currentW = parseInt(diffContent?.style.getPropertyValue('--diff-gutter-w') || '28', 10);
-  const gutterW = maxTracks <= 1 ? 28 : Math.min(84, 16 + maxTracks * 14);
-  if (diffContent && gutterW > currentW) {
-    diffContent.style.setProperty('--diff-gutter-w', gutterW + 'px');
+  if (diffContent) {
+    diffContent.classList.toggle('has-diff-moves', maxTracks > 0);
+    if (maxTracks > 0) {
+      const gutterW = maxTracks === 1 ? 28 : Math.min(84, 16 + maxTracks * 14);
+      diffContent.style.setProperty('--diff-gutter-w', gutterW + 'px');
+    } else {
+      diffContent.style.removeProperty('--diff-gutter-w');
+    }
   }
 }
 
@@ -766,8 +771,39 @@ function flashMoveSection(moveId, targetSide) {
     `.diff-moved-row.diff-moved-${targetSide}[data-move-id="${moveId}"], .diff-move-bar-${targetSide}[data-move-id="${moveId}"]`
   );
   for (const el of els) {
+    el.classList.remove('diff-row-flash');
+    void el.offsetWidth;
     el.classList.add('diff-row-flash');
-    setTimeout(() => el.classList.remove('diff-row-flash'), 1200);
+    setTimeout(() => el.classList.remove('diff-row-flash'), 1050);
+  }
+}
+
+const FLASH_PAUSE_MS = 180; // Intentional pause after arriving before the blink triggers
+
+function jumpAndFlash(targetEl, moveId, targetSide) {
+  if (!targetEl || !diffview) return;
+  const diffRect = diffview.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  const isCentered = Math.abs((targetRect.top + targetRect.height / 2) - (diffRect.top + diffRect.height / 2)) < 30;
+
+  targetEl.scrollIntoView({ block: 'center', behavior: isCentered ? 'auto' : 'smooth' });
+
+  if (isCentered) {
+    if (moveId && targetSide) {
+      setTimeout(() => flashMoveSection(moveId, targetSide), FLASH_PAUSE_MS);
+    }
+    return;
+  }
+
+  if (moveId && targetSide) {
+    let fired = false;
+    const trigger = () => {
+      if (fired) return;
+      fired = true;
+      setTimeout(() => flashMoveSection(moveId, targetSide), FLASH_PAUSE_MS);
+    };
+    diffview.addEventListener('scrollend', trigger, { once: true });
+    setTimeout(trigger, 450);
   }
 }
 
@@ -1200,13 +1236,9 @@ export function initDiff() {
                        (targetLine ? diffview.querySelector(`[data-l="${targetLine}"], [data-at="${targetLine}"], [data-old-l="${targetLine}"]`) : null);
 
       if (targetEl) {
-        targetEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        jumpAndFlash(targetEl, moveId, targetSide);
       } else if (targetLine) {
         scrollDiffToLine(targetLine, true, false);
-      }
-
-      if (moveId && targetSide) {
-        flashMoveSection(moveId, targetSide);
       }
       return;
     }
